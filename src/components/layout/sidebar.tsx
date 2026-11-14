@@ -119,7 +119,7 @@ export function Sidebar({
         </Link>
 
         <Link
-          href="/create"
+          href="/create/item"
           className={cn(
             "flex items-center justify-between rounded-lg px-2.5 py-2 text-[15px] font-semibold transition-colors",
             pathname?.startsWith("/create")
@@ -183,7 +183,7 @@ export function Sidebar({
           asChild
           className="h-10 w-full rounded-lg bg-[#E7F3FF] text-[15px] font-semibold text-[#1877F2] shadow-none hover:bg-[#DBE7F2]"
         >
-          <Link href="/create">
+          <Link href="/create/item">
             <Plus className="mr-1.5 h-4 w-4 stroke-[2.5]" />
             Create new listing
           </Link>

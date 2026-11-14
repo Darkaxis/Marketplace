@@ -101,7 +101,7 @@ export function Header() {
           </Link>
 
           <Link
-            href="/create"
+            href="/create/item"
             className={cn(
               "relative flex h-full w-28 items-center justify-center rounded-lg transition-colors hover:bg-[#F0F2F5]",
               pathname?.startsWith("/create")
@@ -124,7 +124,7 @@ export function Header() {
             size="sm"
             className="rounded-full bg-[#E7F3FF] px-3.5 font-semibold text-[#1877F2] shadow-none hover:bg-[#DBE7F2]"
           >
-            <Link href="/create">
+            <Link href="/create/item">
               <Plus className="h-4 w-4 stroke-[2.5]" />
               <span>Sell</span>
             </Link>
@@ -177,7 +177,7 @@ export function Header() {
               className="justify-start bg-[#1877F2] font-semibold text-white"
               onClick={() => setMobileMenuOpen(false)}
             >
-              <Link href="/create">
+              <Link href="/create/item">
                 <Plus className="mr-2 h-4 w-4" />
                 Create Listing
               </Link>

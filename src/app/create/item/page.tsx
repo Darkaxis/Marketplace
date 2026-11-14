@@ -228,11 +228,11 @@ function CreateItemFormContent() {
       <aside className="w-full shrink-0 border-b border-gray-200 bg-white p-4 sm:p-6 lg:w-[400px] lg:border-b-0 lg:border-r xl:w-[430px]">
         <div className="mb-4">
           <Link
-            href="/create"
+            href="/"
             className="mb-1.5 inline-flex items-center gap-1.5 text-xs font-medium text-gray-500 hover:text-[#1877F2]"
           >
             <ArrowLeft className="h-3.5 w-3.5" />
-            Back to listing types
+            Back to Marketplace
           </Link>
           <div className="flex items-center justify-between">
             <h1 className="text-2xl font-bold text-[#050505]">

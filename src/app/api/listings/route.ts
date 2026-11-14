@@ -1,38 +1,61 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
-  supabase,
   isSupabaseConfigured,
   SAMPLE_LISTINGS,
   type Listing,
 } from "@/lib/supabase";
+import { getServerSupabaseClient } from "@/lib/supabase-admin";
 import { memoryStore } from "@/lib/memory-store";
+import { checkRateLimit } from "@/lib/rate-limit";
+import {
+  hasControlChars,
+  isValidCategorySlug,
+  isValidEmail,
+  sanitizePostgrestSearch,
+  validateSafeImageUrl,
+} from "@/lib/validation";
+
+const MAX_LISTING_PRICE = 99_999_999.99;
 
 // GET /api/listings - Browse listings with optional search and category filtering
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
-    const category = searchParams.get("category")?.trim().toLowerCase();
-    const search = (
-      searchParams.get("search") ||
-      searchParams.get("q") ||
-      ""
-    )
-      .trim()
-      .toLowerCase();
+    const rawCategory = searchParams.get("category")?.trim().toLowerCase() ?? "";
+    const rawSearch =
+      searchParams.get("search") || searchParams.get("q") || "";
+
+    const safeSearch = sanitizePostgrestSearch(rawSearch).toLowerCase();
+
+    if (
+      rawCategory &&
+      rawCategory !== "all" &&
+      !/^[a-z0-9-]+$/.test(rawCategory)
+    ) {
+      return NextResponse.json(
+        { error: "Invalid category parameter" },
+        { status: 400 }
+      );
+    }
 
     if (isSupabaseConfigured()) {
-      let query = supabase
+      const db = getServerSupabaseClient();
+      // Select only public listing fields needed for the browse grid (omit bulk seller_email)
+      let query = db
         .from("listings")
-        .select("*")
-        .order("created_at", { ascending: false });
+        .select(
+          "id, title, description, price, category, image_url, location, created_at, updated_at"
+        )
+        .order("created_at", { ascending: false })
+        .limit(100);
 
-      if (category && category !== "all") {
-        query = query.ilike("category", category);
+      if (rawCategory && rawCategory !== "all") {
+        query = query.eq("category", rawCategory);
       }
 
-      if (search) {
+      if (safeSearch) {
         query = query.or(
-          `title.ilike.%${search}%,description.ilike.%${search}%,location.ilike.%${search}%`
+          `title.ilike.%${safeSearch}%,description.ilike.%${safeSearch}%,location.ilike.%${safeSearch}%`
         );
       }
 
@@ -41,7 +64,7 @@ export async function GET(request: NextRequest) {
       if (error) {
         console.error("Supabase listings fetch error:", error);
         return NextResponse.json(
-          { error: "Failed to fetch listings", details: error.message },
+          { error: "Failed to fetch listings" },
           { status: 500 }
         );
       }
@@ -55,25 +78,25 @@ export async function GET(request: NextRequest) {
     // Fallback when Supabase credentials are not configured yet
     let listings = memoryStore.getListings();
 
-    if (category && category !== "all") {
+    if (rawCategory && rawCategory !== "all") {
       listings = listings.filter(
-        (item) => item.category.toLowerCase() === category
+        (item) => item.category.toLowerCase() === rawCategory
       );
     }
 
-    if (search) {
+    if (safeSearch) {
       listings = listings.filter(
         (item) =>
-          item.title.toLowerCase().includes(search) ||
+          item.title.toLowerCase().includes(safeSearch) ||
           (item.description &&
-            item.description.toLowerCase().includes(search)) ||
-          item.location.toLowerCase().includes(search) ||
-          item.category.toLowerCase().includes(search)
+            item.description.toLowerCase().includes(safeSearch)) ||
+          item.location.toLowerCase().includes(safeSearch) ||
+          item.category.toLowerCase().includes(safeSearch)
       );
     }
 
     return NextResponse.json({
-      listings,
+      listings: listings.slice(0, 100).map(({ seller_email: _omit, ...rest }) => rest),
       source: "fallback",
     });
   } catch (err) {
@@ -85,16 +108,56 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// POST /api/listings - Create a new listing (or seed demo listings)
+// POST /api/listings - Create a new listing (or seed demo listings when empty)
 export async function POST(request: NextRequest) {
   try {
+    const rate = checkRateLimit(request, "listings-create", 20, 10 * 60 * 1000);
+    if (!rate.allowed) {
+      return NextResponse.json(
+        { error: "Too many requests. Please try again later." },
+        {
+          status: 429,
+          headers: { "Retry-After": String(rate.retryAfterSeconds) },
+        }
+      );
+    }
+
     const body = await request.json();
 
-    // Optional seed action to populate sample listings into Supabase
+    // Optional seed action only allowed when the listings table is empty
     if (body?.action === "seed") {
       if (isSupabaseConfigured()) {
+        const db = getServerSupabaseClient();
+        const { data: existing, error: existingErr } = await db
+          .from("listings")
+          .select("id")
+          .limit(1);
+
+        if (existingErr) {
+          console.error("Supabase seed check error:", existingErr);
+          return NextResponse.json(
+            { error: "Failed to check existing listings" },
+            { status: 500 }
+          );
+        }
+
+        if (existing && existing.length > 0) {
+          return NextResponse.json(
+            { error: "Sample listings can only be loaded into an empty database" },
+            { status: 409 }
+          );
+        }
+
         const seedRows = SAMPLE_LISTINGS.map(
-          ({ title, description, price, category, seller_email, image_url, location }) => ({
+          ({
+            title,
+            description,
+            price,
+            category,
+            seller_email,
+            image_url,
+            location,
+          }) => ({
             title,
             description,
             price,
@@ -104,14 +167,15 @@ export async function POST(request: NextRequest) {
             location,
           })
         );
-        const { data, error } = await supabase
+        const { data, error } = await db
           .from("listings")
           .insert(seedRows)
           .select();
 
         if (error) {
+          console.error("Supabase seed insert error:", error);
           return NextResponse.json(
-            { error: "Failed to seed listings", details: error.message },
+            { error: "Failed to seed listings" },
             { status: 500 }
           );
         }
@@ -139,58 +203,123 @@ export async function POST(request: NextRequest) {
       seller_email,
       image_url,
       location,
-    } = body;
+    } = body ?? {};
 
-    // Input validation
-    if (!title || typeof title !== "string" || !title.trim()) {
+    // Input validation & length bounds matching SQL schema
+    if (!title || typeof title !== "string") {
       return NextResponse.json(
         { error: "Title is required" },
         { status: 400 }
       );
     }
+    const cleanTitle = title.trim();
+    if (
+      cleanTitle.length < 3 ||
+      cleanTitle.length > 255 ||
+      hasControlChars(cleanTitle)
+    ) {
+      return NextResponse.json(
+        { error: "Title must be between 3 and 255 characters" },
+        { status: 400 }
+      );
+    }
 
     const numericPrice = Number(price);
-    if (price === undefined || price === null || isNaN(numericPrice) || numericPrice < 0) {
-      return NextResponse.json(
-        { error: "A valid non-negative price is required" },
-        { status: 400 }
-      );
-    }
-
-    if (!category || typeof category !== "string" || !category.trim()) {
-      return NextResponse.json(
-        { error: "Category is required" },
-        { status: 400 }
-      );
-    }
-
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (
-      !seller_email ||
-      typeof seller_email !== "string" ||
-      !emailRegex.test(seller_email.trim())
+      price === undefined ||
+      price === null ||
+      price === "" ||
+      !Number.isFinite(numericPrice) ||
+      numericPrice < 0 ||
+      numericPrice > MAX_LISTING_PRICE
     ) {
+      return NextResponse.json(
+        {
+          error: `Price must be between 0 and ${MAX_LISTING_PRICE.toLocaleString()}`,
+        },
+        { status: 400 }
+      );
+    }
+    const roundedPrice = Math.round(numericPrice * 100) / 100;
+
+    if (!isValidCategorySlug(category)) {
+      return NextResponse.json(
+        { error: "Please select a valid marketplace category" },
+        { status: 400 }
+      );
+    }
+    const cleanCategory = category.trim().toLowerCase();
+
+    if (!isValidEmail(seller_email)) {
       return NextResponse.json(
         { error: "A valid seller email address is required" },
         { status: 400 }
       );
     }
+    const cleanEmail = seller_email.trim();
+
+    let cleanDescription: string | null = null;
+    if (description !== undefined && description !== null) {
+      if (typeof description !== "string") {
+        return NextResponse.json(
+          { error: "Invalid description format" },
+          { status: 400 }
+        );
+      }
+      const trimmedDesc = description.trim();
+      if (trimmedDesc.length > 5000) {
+        return NextResponse.json(
+          { error: "Description cannot exceed 5,000 characters" },
+          { status: 400 }
+        );
+      }
+      cleanDescription = trimmedDesc || null;
+    }
+
+    let cleanLocation = "Palo Alto, CA";
+    if (location !== undefined && location !== null) {
+      if (typeof location !== "string") {
+        return NextResponse.json(
+          { error: "Invalid location format" },
+          { status: 400 }
+        );
+      }
+      const trimmedLoc = location.trim();
+      if (trimmedLoc.length > 255 || hasControlChars(trimmedLoc)) {
+        return NextResponse.json(
+          { error: "Location must be under 255 characters" },
+          { status: 400 }
+        );
+      }
+      if (trimmedLoc) {
+        cleanLocation = trimmedLoc;
+      }
+    }
+
+    const imageValidation = validateSafeImageUrl(
+      image_url,
+      !isSupabaseConfigured()
+    );
+    if (!imageValidation.valid) {
+      return NextResponse.json(
+        { error: imageValidation.error || "Invalid image URL" },
+        { status: 400 }
+      );
+    }
 
     const cleanListingData = {
-      title: title.trim(),
-      description: description ? String(description).trim() : null,
-      price: numericPrice,
-      category: category.trim().toLowerCase(),
-      seller_email: seller_email.trim(),
-      image_url: image_url ? String(image_url).trim() : null,
-      location:
-        location && String(location).trim()
-          ? String(location).trim()
-          : "Palo Alto, CA",
+      title: cleanTitle,
+      description: cleanDescription,
+      price: roundedPrice,
+      category: cleanCategory,
+      seller_email: cleanEmail,
+      image_url: imageValidation.value,
+      location: cleanLocation,
     };
 
     if (isSupabaseConfigured()) {
-      const { data, error } = await supabase
+      const db = getServerSupabaseClient();
+      const { data, error } = await db
         .from("listings")
         .insert([cleanListingData])
         .select()
@@ -199,7 +328,7 @@ export async function POST(request: NextRequest) {
       if (error) {
         console.error("Supabase create listing error:", error);
         return NextResponse.json(
-          { error: "Failed to create listing", details: error.message },
+          { error: "Failed to create listing" },
           { status: 500 }
         );
       }

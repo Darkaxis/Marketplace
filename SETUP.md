@@ -54,6 +54,9 @@ This guide covers connecting your **Supabase** backend and deploying to **Vercel
    - Add the following in the Vercel project settings:
      - `NEXT_PUBLIC_SUPABASE_URL`
      - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+     - `RESEND_API_KEY` (optional, for instant seller emails)
+     - `EMAIL_FROM` (optional, defaults to `Marketplace <onboarding@resend.dev>`)
+     - `NEXT_PUBLIC_SITE_URL` (optional, canonical Vercel URL for links in notification emails)
 
 4. **Deploy**
    - Click **Deploy**. Next.js 15 will build and deploy your application.

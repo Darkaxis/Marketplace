@@ -27,9 +27,18 @@ import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Separator } from "@/components/ui/separator";
 import { Card, CardContent } from "@/components/ui/card";
-import { type Listing, type Message } from "@/lib/supabase";
+import { type Listing } from "@/lib/supabase";
 import { getCategoryLabel } from "@/lib/categories";
 import { formatPrice, formatRelativeTime } from "@/lib/utils";
+import { isSafeDisplayImageUrl } from "@/lib/validation";
+
+interface InquiryItem {
+  id: string;
+  listing_id: string;
+  buyer_label: string;
+  created_at: string;
+  own_message?: string;
+}
 
 const QUICK_MESSAGES = [
   "Hi, is this still available?",
@@ -39,7 +48,7 @@ const QUICK_MESSAGES = [
 
 export function ItemDetailClient({ id }: { id: string }) {
   const [listing, setListing] = useState<Listing | null>(null);
-  const [messages, setMessages] = useState<Message[]>([]);
+  const [messages, setMessages] = useState<InquiryItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [imgError, setImgError] = useState(false);
@@ -121,7 +130,6 @@ export function ItemDetailClient({ id }: { id: string }) {
         body: JSON.stringify({
           listing_id: listing.id,
           buyer_email: buyerEmail.trim(),
-          seller_email: listing.seller_email,
           message: messageText.trim(),
         }),
       });
@@ -200,19 +208,19 @@ export function ItemDetailClient({ id }: { id: string }) {
           <span>Back to Marketplace</span>
         </Link>
 
-        {listing.image_url && !imgError ? (
+        {isSafeDisplayImageUrl(listing.image_url) && !imgError ? (
           <>
             {/* Ambient blurred background */}
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              src={listing.image_url}
+              src={listing.image_url!}
               alt=""
               className="absolute inset-0 h-full w-full scale-110 object-cover opacity-30 blur-2xl"
             />
             {/* Main crisp image */}
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              src={listing.image_url}
+              src={listing.image_url!}
               alt={listing.title}
               onError={() => setImgError(true)}
               className="relative z-10 max-h-[82vh] w-full max-w-4xl rounded-lg object-contain shadow-2xl"
@@ -425,6 +433,7 @@ export function ItemDetailClient({ id }: { id: string }) {
                   <Input
                     id="buyer_email"
                     type="email"
+                    maxLength={255}
                     placeholder="your.email@example.com"
                     value={buyerEmail}
                     onChange={(e) => setBuyerEmail(e.target.value)}
@@ -440,6 +449,7 @@ export function ItemDetailClient({ id }: { id: string }) {
                   <Textarea
                     id="message"
                     rows={3}
+                    maxLength={2000}
                     placeholder="Write your message to the seller..."
                     value={messageText}
                     onChange={(e) => setMessageText(e.target.value)}
@@ -469,7 +479,7 @@ export function ItemDetailClient({ id }: { id: string }) {
             </CardContent>
           </Card>
 
-          {/* Messages History for this Listing */}
+          {/* Anonymized Inquiries Activity for this Listing */}
           {messages.length > 0 && (
             <div className="space-y-3">
               <div className="flex items-center justify-between">
@@ -485,14 +495,14 @@ export function ItemDetailClient({ id }: { id: string }) {
                   >
                     <div className="mb-1 flex items-center justify-between">
                       <span className="font-semibold text-[#1877F2]">
-                        {msg.buyer_email}
+                        {msg.buyer_label}
                       </span>
                       <span className="text-[11px] text-gray-400">
                         {formatRelativeTime(msg.created_at)}
                       </span>
                     </div>
                     <p className="text-gray-700 leading-relaxed">
-                      {msg.message}
+                      {msg.own_message || "Sent an inquiry to the seller."}
                     </p>
                   </div>
                 ))}

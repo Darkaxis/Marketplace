@@ -20,6 +20,7 @@ import { Input } from "@/components/ui/input";
 import { type Listing } from "@/lib/supabase";
 import { CATEGORIES, getCategoryLabel } from "@/lib/categories";
 import { formatPrice, formatRelativeTime, cn } from "@/lib/utils";
+import { isSafeDisplayImageUrl } from "@/lib/validation";
 
 interface ItemGridProps {
   initialCategory?: string;
@@ -292,10 +293,10 @@ function ListingCard({ item }: { item: Listing }) {
       <Card className="h-full overflow-hidden rounded-xl border border-gray-200/80 bg-white shadow-2xs transition-all duration-200 group-hover:-translate-y-0.5 group-hover:shadow-md">
         {/* Square Image Container */}
         <div className="relative aspect-square w-full overflow-hidden bg-gray-100">
-          {item.image_url && !imgError ? (
+          {isSafeDisplayImageUrl(item.image_url) && !imgError ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
-              src={item.image_url}
+              src={item.image_url!}
               alt={item.title}
               onError={() => setImgError(true)}
               className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"

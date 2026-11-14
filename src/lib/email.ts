@@ -16,6 +16,10 @@ export interface EmailResult {
   error?: string;
 }
 
+function sanitizeHeaderText(text: string): string {
+  return text.replace(/[\r\n\0]+/g, " ").trim();
+}
+
 function escapeHtml(text: string): string {
   return text
     .replace(/&/g, "&amp;")
@@ -36,12 +40,17 @@ export async function sendSellerNotificationEmail(
   const fromAddress =
     process.env.EMAIL_FROM || "Marketplace <onboarding@resend.dev>";
 
-  const itemTitle = payload.listingTitle || "your Marketplace listing";
+  const itemTitle = sanitizeHeaderText(
+    payload.listingTitle || "your Marketplace listing"
+  ).slice(0, 200);
   const priceLabel =
     payload.listingPrice !== undefined
       ? ` (${formatPrice(payload.listingPrice)})`
       : "";
   const subject = `New Marketplace inquiry about "${itemTitle}"${priceLabel}`;
+
+  const cleanSellerEmail = sanitizeHeaderText(payload.sellerEmail);
+  const cleanBuyerEmail = sanitizeHeaderText(payload.buyerEmail);
 
   if (!apiKey) {
     console.info(
@@ -104,8 +113,8 @@ export async function sendSellerNotificationEmail(
       },
       body: JSON.stringify({
         from: fromAddress,
-        to: [payload.sellerEmail],
-        reply_to: payload.buyerEmail,
+        to: [cleanSellerEmail],
+        reply_to: cleanBuyerEmail,
         subject,
         html,
         text,

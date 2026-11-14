@@ -30,7 +30,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { CATEGORIES, getCategoryLabel } from "@/lib/categories";
+import { CATEGORIES, getCategoryBySlug, getCategoryLabel } from "@/lib/categories";
 import { formatPrice, cn } from "@/lib/utils";
 
 function CreateItemFormContent() {
@@ -38,7 +38,8 @@ function CreateItemFormContent() {
   const searchParams = useSearchParams();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const defaultCat = searchParams.get("category") || "electronics";
+  const rawDefaultCat = searchParams.get("category") || "electronics";
+  const defaultCat = getCategoryBySlug(rawDefaultCat)?.slug || "electronics";
 
   const [title, setTitle] = useState("");
   const [price, setPrice] = useState("");
@@ -58,10 +59,19 @@ function CreateItemFormContent() {
 
   useEffect(() => {
     const paramCat = searchParams.get("category");
-    if (paramCat) {
-      setCategory(paramCat);
+    const verifiedCat = paramCat ? getCategoryBySlug(paramCat)?.slug : undefined;
+    if (verifiedCat) {
+      setCategory(verifiedCat);
     }
   }, [searchParams]);
+
+  useEffect(() => {
+    return () => {
+      if (previewUrl.startsWith("blob:")) {
+        URL.revokeObjectURL(previewUrl);
+      }
+    };
+  }, [previewUrl]);
 
   const handleFileSelect = async (file: File) => {
     setError(null);
@@ -83,9 +93,10 @@ function CreateItemFormContent() {
       return;
     }
 
-    // Immediate local object URL preview
+    // Immediate local object URL preview (never persisted to DB)
     const localObjectUrl = URL.createObjectURL(file);
     setPreviewUrl(localObjectUrl);
+    setImageUrl("");
 
     try {
       setUploadingImage(true);
@@ -104,6 +115,9 @@ function CreateItemFormContent() {
 
       setImageUrl(data.url);
     } catch (err) {
+      URL.revokeObjectURL(localObjectUrl);
+      setPreviewUrl("");
+      setImageUrl("");
       setError(
         err instanceof Error
           ? err.message
@@ -181,7 +195,7 @@ function CreateItemFormContent() {
           location: location.trim() || "Palo Alto, CA",
           description: description.trim(),
           seller_email: sellerEmail.trim(),
-          image_url: imageUrl || previewUrl || null,
+          image_url: imageUrl || null,
         }),
       });
 
@@ -332,6 +346,7 @@ function CreateItemFormContent() {
               </Label>
               <Input
                 id="title"
+                maxLength={255}
                 placeholder="What are you selling?"
                 value={title}
                 onChange={(e) => {
@@ -410,6 +425,7 @@ function CreateItemFormContent() {
                 <Input
                   id="seller_email"
                   type="email"
+                  maxLength={255}
                   placeholder="you@example.com"
                   value={sellerEmail}
                   onChange={(e) => {
@@ -441,6 +457,7 @@ function CreateItemFormContent() {
                 <MapPin className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500" />
                 <Input
                   id="location"
+                  maxLength={255}
                   placeholder="Palo Alto, CA"
                   value={location}
                   onChange={(e) => setLocation(e.target.value)}
@@ -455,6 +472,7 @@ function CreateItemFormContent() {
               <Textarea
                 id="description"
                 rows={4}
+                maxLength={5000}
                 placeholder="Describe your item's condition, specs, included accessories, and pickup details..."
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}

@@ -5,13 +5,10 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
   Store,
-  Bell,
-  Inbox,
   ShoppingBag,
   Tag,
   Plus,
   Search,
-  MapPin,
   Settings,
   ChevronRight,
 } from "lucide-react";
@@ -155,26 +152,6 @@ export function Sidebar({
           </div>
           <ChevronRight className="h-4 w-4 text-gray-400" />
         </Link>
-
-        <Link
-          href="/"
-          className="flex items-center gap-3 rounded-lg px-2.5 py-2 text-[15px] font-medium text-[#050505] transition-colors hover:bg-[#F0F2F5]"
-        >
-          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#E4E6EB] text-[#050505]">
-            <Bell className="h-5 w-5" />
-          </div>
-          <span>Notifications</span>
-        </Link>
-
-        <Link
-          href="/"
-          className="flex items-center gap-3 rounded-lg px-2.5 py-2 text-[15px] font-medium text-[#050505] transition-colors hover:bg-[#F0F2F5]"
-        >
-          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#E4E6EB] text-[#050505]">
-            <Inbox className="h-5 w-5" />
-          </div>
-          <span>Inbox</span>
-        </Link>
       </div>
 
       {/* Create New Listing CTA */}
@@ -188,19 +165,6 @@ export function Sidebar({
             Create new listing
           </Link>
         </Button>
-      </div>
-
-      <Separator className="my-4" />
-
-      {/* Location Filter Section */}
-      <div className="px-1">
-        <h2 className="mb-2 text-[17px] font-semibold text-[#050505]">
-          Filters
-        </h2>
-        <div className="flex items-center gap-2 rounded-lg px-2 py-2 text-sm font-semibold text-[#1877F2] transition-colors hover:bg-[#F0F2F5]">
-          <MapPin className="h-4 w-4 shrink-0" />
-          <span>Palo Alto, California · Within 40 mi</span>
-        </div>
       </div>
 
       <Separator className="my-4" />
